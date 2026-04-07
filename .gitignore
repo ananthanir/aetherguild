@@ -53,3 +53,5 @@ yarn.lock
 *.njsproj
 *.sln
 *.sw?
+.claude/worktrees/agitated-buck/
+/.claude
