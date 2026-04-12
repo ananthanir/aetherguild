@@ -1,4 +1,7 @@
 <script lang="ts">
+  import { invoke } from "@tauri-apps/api/core";
+  import { listen } from "@tauri-apps/api/event";
+  import { onMount } from "svelte";
   import {
     Play,
     Square,
@@ -40,6 +43,54 @@
     copied = key;
     setTimeout(() => (copied = ""), 1500);
   }
+
+  async function startDruid() {
+    status = "starting";
+    try {
+      await invoke("start_druid");
+    } catch (e) {
+      console.error("Failed to start druid:", e);
+      status = "stopped";
+    }
+  }
+
+  async function stopDruid() {
+    try {
+      await invoke("stop_druid");
+    } catch (e) {
+      console.error("Failed to stop druid:", e);
+    }
+  }
+
+  async function restartDruid() {
+    status = "starting";
+    try {
+      await invoke("restart_druid");
+    } catch (e) {
+      console.error("Failed to restart druid:", e);
+      status = "stopped";
+    }
+  }
+
+  onMount(async () => {
+    // Get initial status
+    try {
+      const s = await invoke<string>("get_status");
+      status = s === "running" ? "running" : "stopped";
+    } catch (e) {
+      console.warn("get_status failed (not in Tauri context?):", e);
+    }
+
+    // Listen for status changes
+    try {
+      const unlisten = await listen<{ status: string }>("druid-status", (event) => {
+        status = event.payload.status === "running" ? "running" : "stopped";
+      });
+      return () => unlisten();
+    } catch (e) {
+      console.warn("listen failed:", e);
+    }
+  });
 </script>
 
 <div class="flex-1 overflow-y-auto" in:fade={{duration: 200}}>
@@ -56,22 +107,23 @@
         {#if status === "stopped"}
           <button
             class="flex items-center gap-2 rounded-lg bg-[#00ff66]/10 px-5 py-2.5 text-sm font-bold tracking-wide text-[#00ff66] border border-[#00ff66]/30 shadow-[0_0_15px_rgba(0,255,102,0.1)] transition-all hover:bg-[#00ff66]/20 hover:shadow-[0_0_20px_rgba(0,255,102,0.3)] hover:-translate-y-0.5"
-            onclick={() => (status = "running")}
+            onclick={startDruid}
+            disabled={status === "starting"}
             in:fade={{duration: 150}}
           >
-            <Play size={16} /> START NODE
+            <Play size={16} /> {status === "starting" ? "STARTING..." : "START NODE"}
           </button>
         {:else}
           <button
             class="flex items-center gap-2 rounded-lg bg-surface-3 px-5 py-2.5 text-sm font-medium text-text border border-border transition-all hover:bg-border hover:-translate-y-0.5"
-            onclick={() => (status = "running")}
+            onclick={restartDruid}
             in:fade={{duration: 150}}
           >
             <RotateCcw size={16} /> Restart
           </button>
           <button
             class="flex items-center gap-2 rounded-lg bg-[#ff0055]/10 px-5 py-2.5 text-sm font-bold tracking-wide text-[#ff0055] border border-[#ff0055]/30 shadow-[0_0_15px_rgba(255,0,85,0.1)] transition-all hover:bg-[#ff0055]/20 hover:shadow-[0_0_20px_rgba(255,0,85,0.3)] hover:-translate-y-0.5"
-            onclick={() => (status = "stopped")}
+            onclick={stopDruid}
             in:fade={{duration: 150}}
           >
             <Square size={16} /> STOP NODE

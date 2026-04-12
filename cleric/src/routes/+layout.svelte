@@ -2,6 +2,10 @@
   import "../app.css";
   import { page } from "$app/stores";
   import { fade } from "svelte/transition";
+  import { invoke } from "@tauri-apps/api/core";
+  import { listen } from "@tauri-apps/api/event";
+  import { onMount } from "svelte";
+  import { initLogListener } from "$lib/stores/logs.svelte";
   import {
     LayoutDashboard,
     Search,
@@ -21,6 +25,25 @@
   ];
 
   let druidRunning = $state(false);
+
+  onMount(async () => {
+    // Start collecting logs globally
+    initLogListener();
+
+    // Get initial status
+    try {
+      const s = await invoke<string>("get_status");
+      druidRunning = s === "running";
+    } catch { /* not in Tauri context (dev browser) */ }
+
+    // Listen for status changes
+    try {
+      const unlisten = await listen<{ status: string }>("druid-status", (event) => {
+        druidRunning = event.payload.status === "running";
+      });
+      return () => unlisten();
+    } catch { /* not in Tauri context */ }
+  });
 </script>
 
 <div class="flex h-screen w-screen overflow-hidden">
@@ -79,7 +102,7 @@
   </nav>
 
   <!-- Main content -->
-  <main class="relative flex flex-1 flex-col overflow-y-auto overflow-x-hidden">
+  <main class="relative flex flex-1 flex-col overflow-hidden">
     {@render children()}
   </main>
 </div>
