@@ -1,7 +1,8 @@
 <script lang="ts">
   import { invoke } from "@tauri-apps/api/core";
   import { listen } from "@tauri-apps/api/event";
-  import { onMount } from "svelte";
+  import { onMount, onDestroy } from "svelte";
+  import { getBlockNumber } from "$lib/rpc";
   import {
     Play,
     Square,
@@ -13,7 +14,6 @@
     Send,
     Blocks,
     Link,
-    Wallet,
     Hash,
     Cpu,
   } from "lucide-svelte";
@@ -22,10 +22,11 @@
 
   let status = $state<"stopped" | "starting" | "running">("stopped");
   let blockNumber = $state(0);
-  let devBalance = $state("10000.00");
   let showPrivKey = $state(false);
   let fundAddress = $state("");
   let fundAmount = $state("10");
+  let fundStatus = $state<"idle" | "loading" | "success" | "error">("idle");
+  let fundError = $state("");
   let copied = $state("");
 
   const devAddress = "0x71562b71999567F8C7E3BD885b2D4Fe429781573";
@@ -72,8 +73,33 @@
     }
   }
 
+  async function sendFunds() {
+    if (!fundAddress.trim()) return;
+    fundStatus = "loading";
+    fundError = "";
+    try {
+      await invoke("fund", {
+        address: fundAddress.trim(),
+        amount: parseInt(fundAmount) || 1,
+      });
+      fundStatus = "success";
+      setTimeout(() => { fundStatus = "idle"; }, 3000);
+    } catch (e: any) {
+      fundError = String(e);
+      fundStatus = "error";
+      setTimeout(() => { fundStatus = "idle"; }, 4000);
+    }
+  }
+
+  let blockInterval: ReturnType<typeof setInterval>;
+
+  async function pollBlockNumber() {
+    try {
+      blockNumber = await getBlockNumber();
+    } catch { /* druid offline */ }
+  }
+
   onMount(async () => {
-    // Get initial status
     try {
       const s = await invoke<string>("get_status");
       status = s === "running" ? "running" : "stopped";
@@ -81,16 +107,20 @@
       console.warn("get_status failed (not in Tauri context?):", e);
     }
 
-    // Listen for status changes
     try {
       const unlisten = await listen<{ status: string }>("druid-status", (event) => {
         status = event.payload.status === "running" ? "running" : "stopped";
       });
-      return () => unlisten();
+      // Start polling block number
+      await pollBlockNumber();
+      blockInterval = setInterval(pollBlockNumber, 3000);
+      return () => { unlisten(); clearInterval(blockInterval); };
     } catch (e) {
       console.warn("listen failed:", e);
     }
   });
+
+  onDestroy(() => clearInterval(blockInterval));
 </script>
 
 <div class="flex-1 overflow-y-auto" in:fade={{duration: 200}}>
@@ -149,18 +179,6 @@
               <Hash size={14} class="text-[#8a2be2]" /> Chain ID
             </div>
             <div class="font-mono text-2xl font-semibold tracking-tight text-white">1337</div>
-          </div>
-          <div class="rounded-xl border border-border bg-surface-2 p-4 transition-colors hover:border-[#00f0ff]/30">
-            <div class="flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-text-dimmer mb-2">
-              <Wallet size={14} class="text-[#00f0ff]" /> Top Balance
-            </div>
-            <div class="font-mono text-2xl font-semibold tracking-tight text-white">{devBalance} <span class="text-xs text-text-dim">ETH</span></div>
-          </div>
-          <div class="rounded-xl border border-border bg-surface-2 p-4 transition-colors hover:border-[#00f0ff]/30">
-            <div class="flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-text-dimmer mb-2">
-              <Link size={14} class="text-[#00ff66]" /> Active Peers
-            </div>
-            <div class="font-mono text-2xl font-semibold tracking-tight text-white">0</div>
           </div>
         </div>
       </div>
@@ -268,11 +286,25 @@
               <span class="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold text-text-dimmer">ETH</span>
             </div>
             <button
-              class="group flex flex-1 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#8a2be2] to-[#6a1b9a] px-5 py-3 text-sm font-bold text-white shadow-[0_0_15px_rgba(138,43,226,0.3)] transition-all hover:scale-[1.02] hover:shadow-[0_0_20px_rgba(138,43,226,0.5)]"
+              onclick={sendFunds}
+              disabled={fundStatus === "loading" || !fundAddress.trim()}
+              class="group flex flex-1 items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm font-bold text-white shadow-[0_0_15px_rgba(138,43,226,0.3)] transition-all hover:scale-[1.02] hover:shadow-[0_0_20px_rgba(138,43,226,0.5)] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100
+                {fundStatus === 'success' ? 'bg-gradient-to-r from-[#00ff66] to-[#00cc44]' : fundStatus === 'error' ? 'bg-gradient-to-r from-[#ff0055] to-[#cc0044]' : 'bg-gradient-to-r from-[#8a2be2] to-[#6a1b9a]'}"
             >
-              Transfer <Send size={14} class="transition-transform group-hover:translate-x-1" />
+              {#if fundStatus === "loading"}
+                <span class="animate-spin">⟳</span> Sending...
+              {:else if fundStatus === "success"}
+                <Check size={14} /> Sent!
+              {:else if fundStatus === "error"}
+                Failed
+              {:else}
+                Transfer <Send size={14} class="transition-transform group-hover:translate-x-1" />
+              {/if}
             </button>
           </div>
+          {#if fundStatus === "error" && fundError}
+            <p class="text-xs text-[#ff0055]" in:fade={{duration:150}}>{fundError}</p>
+          {/if}
         </div>
       </div>
 
