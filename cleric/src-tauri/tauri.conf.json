@@ -24,7 +24,7 @@
   },
   "bundle": {
     "active": true,
-    "externalBin": ["druid"],
+    "externalBin": [],
     "targets": "all",
     "icon": [
       "icons/32x32.png",

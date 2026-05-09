@@ -6,11 +6,6 @@
   "permissions": [
     "core:default",
     "opener:default",
-    "shell:allow-kill",
-    {
-      "identifier": "shell:allow-spawn",
-      "allow": [{ "name": "druid", "sidecar": true }]
-    },
     "dialog:allow-open"
   ]
 }
