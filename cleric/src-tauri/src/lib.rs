@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, RunEvent, State};
@@ -29,6 +30,9 @@ struct AppState {
     child:      Arc<Mutex<Option<tokio::process::Child>>>,
     druid_path: PathBuf,
     solc_path:  PathBuf,
+    // Set true when *we* kill druid (stop/restart/app-exit) so the exit watcher
+    // can tell a deliberate shutdown from a crash and only surface the latter.
+    user_stopped: Arc<AtomicBool>,
 }
 
 #[derive(Clone, Serialize)]
@@ -36,6 +40,9 @@ struct LogPayload { line: String, stream: String }
 
 #[derive(Clone, Serialize)]
 struct StatusPayload { status: String }
+
+#[derive(Clone, Serialize)]
+struct ErrorPayload { message: String, detail: String }
 
 // ── Binary extraction ─────────────────────────────────────────────────────
 /// Write `bytes` to `path` only when the file is absent or a different size.
@@ -110,6 +117,14 @@ fn authorize_druid(path: &PathBuf) -> bool {
 }
 
 // ── Druid management ──────────────────────────────────────────────────────
+/// Append a log line to the capped ring buffer used for crash-dialog context.
+fn push_recent(buf: &Arc<Mutex<std::collections::VecDeque<String>>>, line: &str) {
+    if let Ok(mut q) = buf.lock() {
+        if q.len() >= 30 { q.pop_front(); }
+        q.push_back(line.to_string());
+    }
+}
+
 #[tauri::command]
 async fn start_druid(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
     {
@@ -119,10 +134,15 @@ async fn start_druid(app: AppHandle, state: State<'_, AppState>) -> Result<(), S
 
     use tokio::io::{AsyncBufReadExt, BufReader};
 
+    // Fresh run: clear the "we stopped it" flag so a crash this time is reported.
+    state.user_stopped.store(false, Ordering::SeqCst);
+
     let mut cmd = tokio::process::Command::new(&state.druid_path);
     cmd.stdout(std::process::Stdio::piped()).stderr(std::process::Stdio::piped());
     #[cfg(windows)] cmd.creation_flags(NO_WINDOW);
-    let mut child = cmd.spawn().map_err(|e| format!("Failed to spawn druid: {e}"))?;
+    let mut child = cmd.spawn().map_err(|e| {
+        format!("Could not start the druid node.\n\n{e}\n\nThe binary may be blocked by Windows (Smart App Control / SmartScreen) or missing.")
+    })?;
 
     let stdout = child.stdout.take().unwrap();
     let stderr = child.stderr.take().unwrap();
@@ -134,25 +154,50 @@ async fn start_druid(app: AppHandle, state: State<'_, AppState>) -> Result<(), S
 
     let _ = app.emit("druid-status", StatusPayload { status: "running".into() });
 
+    // Ring buffer of the most recent log lines from BOTH streams. druid may print
+    // a fatal error to either stdout or stderr, so we keep both — that's exactly
+    // what the user sees in the Logs page — and use it as the error dialog detail.
+    let recent: Arc<Mutex<std::collections::VecDeque<String>>> =
+        Arc::new(Mutex::new(std::collections::VecDeque::new()));
+
     // Stream stdout
     let app_out = app.clone();
+    let recent_out = recent.clone();
     tauri::async_runtime::spawn(async move {
         let mut lines = BufReader::new(stdout).lines();
         while let Ok(Some(line)) = lines.next_line().await {
+            push_recent(&recent_out, &line);
             let _ = app_out.emit("druid-log", LogPayload { line, stream: "stdout".into() });
         }
     });
 
-    // Stream stderr; detect exit when the pipe closes
+    // Stream stderr; detect exit when the pipe closes.
     let app_err = app.clone();
     let child_ref = state.child.clone();
+    let user_stopped = state.user_stopped.clone();
+    let recent_err = recent.clone();
     tauri::async_runtime::spawn(async move {
         let mut lines = BufReader::new(stderr).lines();
         while let Ok(Some(line)) = lines.next_line().await {
+            push_recent(&recent_err, &line);
             let _ = app_err.emit("druid-log", LogPayload { line, stream: "stderr".into() });
         }
+        // The pipe closed => the process has exited.
         let _ = app_err.emit("druid-status", StatusPayload { status: "stopped".into() });
         if let Ok(mut g) = child_ref.lock() { *g = None; }
+
+        // If we didn't stop it ourselves, the node crashed/failed to stay up —
+        // surface it with the last lines it logged (from either stream).
+        if !user_stopped.load(Ordering::SeqCst) {
+            let detail = recent_err
+                .lock()
+                .map(|q| q.iter().cloned().collect::<Vec<_>>().join("\n"))
+                .unwrap_or_default();
+            let _ = app_err.emit("druid-error", ErrorPayload {
+                message: "Druid stopped unexpectedly. It may have failed to start or crashed.".into(),
+                detail,
+            });
+        }
     });
 
     Ok(())
@@ -160,6 +205,8 @@ async fn start_druid(app: AppHandle, state: State<'_, AppState>) -> Result<(), S
 
 #[tauri::command]
 async fn stop_druid(state: State<'_, AppState>) -> Result<(), String> {
+    // Mark this as a deliberate stop so the exit watcher doesn't raise an error.
+    state.user_stopped.store(true, Ordering::SeqCst);
     let mut guard = state.child.lock().map_err(|e| e.to_string())?;
     match guard.take() {
         Some(mut child) => child.start_kill().map_err(|e| format!("Failed to kill druid: {e}")),
@@ -170,6 +217,8 @@ async fn stop_druid(state: State<'_, AppState>) -> Result<(), String> {
 #[tauri::command]
 async fn restart_druid(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
     {
+        // Deliberate kill; start_druid will clear the flag again for the new run.
+        state.user_stopped.store(true, Ordering::SeqCst);
         let mut guard = state.child.lock().map_err(|e| e.to_string())?;
         if let Some(mut child) = guard.take() { let _ = child.start_kill(); }
     }
@@ -458,6 +507,7 @@ pub fn run() {
                 child: Arc::new(Mutex::new(None)),
                 druid_path,
                 solc_path,
+                user_stopped: Arc::new(AtomicBool::new(false)),
             });
 
             Ok(())
@@ -477,10 +527,14 @@ pub fn run() {
         .expect("error while building tauri application")
         .run(|app, event| {
             if let RunEvent::Exit = event {
-                if let Ok(mut g) = app.state::<AppState>().child.lock() {
-                    if let Some(mut child) = g.take() {
-                        let _ = child.start_kill();
-                    }
+                let state = app.state::<AppState>();
+                state.user_stopped.store(true, Ordering::SeqCst);
+                let mut guard = match state.child.lock() {
+                    Ok(g) => g,
+                    Err(poisoned) => poisoned.into_inner(),
+                };
+                if let Some(mut child) = guard.take() {
+                    let _ = child.start_kill();
                 }
             }
         });

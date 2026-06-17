@@ -7,6 +7,8 @@
   import { onMount } from "svelte";
   import { initLogListener } from "$lib/stores/logs.svelte";
   import { theme } from "$lib/stores/theme.svelte";
+  import { errorDialog } from "$lib/stores/errorDialog.svelte";
+  import ErrorModal from "$lib/components/ErrorModal.svelte";
   import {
     LayoutDashboard,
     Search,
@@ -42,12 +44,22 @@
       druidRunning = s === "running";
     } catch { /* not in Tauri context (dev browser) */ }
 
-    // Listen for status changes
+    // Listen for status changes + unexpected exits (shown as an error dialog).
     try {
-      const unlisten = await listen<{ status: string }>("druid-status", (event) => {
+      const unlistenStatus = await listen<{ status: string }>("druid-status", (event) => {
         druidRunning = event.payload.status === "running";
       });
-      return () => unlisten();
+      const unlistenError = await listen<{ message: string; detail: string }>(
+        "druid-error",
+        (event) => {
+          const { message: msg, detail } = event.payload;
+          errorDialog.show("Druid Error", msg, detail);
+        },
+      );
+      return () => {
+        unlistenStatus();
+        unlistenError();
+      };
     } catch { /* not in Tauri context */ }
   });
 </script>
@@ -130,3 +142,6 @@
     {@render children()}
   </main>
 </div>
+
+<!-- Global error popup -->
+<ErrorModal />

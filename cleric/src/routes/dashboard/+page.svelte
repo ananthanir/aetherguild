@@ -3,6 +3,7 @@
   import { listen } from "@tauri-apps/api/event";
   import { onMount, onDestroy } from "svelte";
   import { getBlockNumber } from "$lib/rpc";
+  import { errorDialog } from "$lib/stores/errorDialog.svelte";
   import {
     Play,
     Square,
@@ -52,6 +53,7 @@
     } catch (e) {
       console.error("Failed to start druid:", e);
       status = "stopped";
+      errorDialog.show("Failed to start Druid", String(e));
     }
   }
 
@@ -70,6 +72,7 @@
     } catch (e) {
       console.error("Failed to restart druid:", e);
       status = "stopped";
+      errorDialog.show("Failed to restart Druid", String(e));
     }
   }
 
