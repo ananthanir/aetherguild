@@ -250,28 +250,28 @@
   }
 
   const kindStyle: Record<string, string> = {
-    "contract":          "bg-[#00f0ff]/10 text-[#00f0ff]",
-    "abstract contract": "bg-[#8a2be2]/10 text-[#8a2be2]",
-    "interface":         "bg-[#ffb800]/10 text-[#ffb800]",
-    "library":           "bg-[#00ff66]/10 text-[#00ff66]",
+    "contract":          "bg-accent/10 text-accent",
+    "abstract contract": "bg-primary/10 text-primary",
+    "interface":         "bg-yellow/10 text-yellow",
+    "library":           "bg-green/10 text-green",
   };
 </script>
 
 <!-- File Editor Modal -->
 {#if editorOpen && editorFile}
   <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-6">
-    <div class="flex h-full w-full max-w-4xl flex-col rounded-2xl border border-border bg-[#03040b] shadow-2xl">
+    <div class="flex h-full w-full max-w-4xl flex-col rounded-2xl border border-border bg-background shadow-2xl">
 
       <!-- Modal header -->
       <div class="flex items-center justify-between border-b border-border px-5 py-4">
         <div class="flex items-center gap-3 min-w-0">
-          <FileCode size={16} class="shrink-0 text-[#00f0ff]" />
+          <FileCode size={16} class="shrink-0 text-accent" />
           <div class="min-w-0">
-            <div class="text-sm font-semibold text-white">{editorFile.filename}</div>
+            <div class="text-sm font-semibold text-text">{editorFile.filename}</div>
             <div class="truncate font-mono text-[10px] text-text-dimmer">{editorFile.path}</div>
           </div>
           {#if editorDirty}
-            <span class="shrink-0 rounded-full bg-[#ffb800]/15 px-2 py-0.5 text-[10px] text-[#ffb800]">unsaved</span>
+            <span class="shrink-0 rounded-full bg-yellow/15 px-2 py-0.5 text-[10px] text-yellow">unsaved</span>
           {/if}
         </div>
         <div class="flex items-center gap-2">
@@ -279,7 +279,7 @@
             onclick={saveEditor}
             disabled={editorSaving || !editorDirty}
             class="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all disabled:opacity-40
-              {editorSaved ? 'bg-[#00ff66]/15 text-[#00ff66]' : 'bg-[#00f0ff]/10 text-[#00f0ff] hover:bg-[#00f0ff]/20'}"
+              {editorSaved ? 'bg-green/15 text-green' : 'bg-accent/10 text-accent hover:bg-accent/20'}"
           >
             {#if editorSaved}
               <Check size={14} /> Saved
@@ -289,7 +289,7 @@
           </button>
           <button
             onclick={closeEditor}
-            class="rounded-lg p-2 text-text-dim transition-colors hover:bg-surface-2 hover:text-white"
+            class="rounded-lg p-2 text-text-dim transition-colors hover:bg-surface-2 hover:text-text"
           >
             <X size={16} />
           </button>
@@ -297,7 +297,7 @@
       </div>
 
       {#if editorError}
-        <div class="flex items-center gap-2 border-b border-border bg-[#ff0055]/10 px-5 py-2 text-xs text-[#ff0055]">
+        <div class="flex items-center gap-2 border-b border-border bg-red/10 px-5 py-2 text-xs text-red">
           <AlertTriangle size={13} /> {editorError}
         </div>
       {/if}
@@ -343,12 +343,12 @@
       </div>
     {/if}
     {#if s.scanError}
-      <div class="flex items-center gap-2 rounded-lg border border-[#ff0055]/30 bg-[#ff0055]/10 px-3 py-2 text-xs text-[#ff0055]">
+      <div class="flex items-center gap-2 rounded-lg border border-red/30 bg-red/10 px-3 py-2 text-xs text-red">
         <AlertTriangle size={13} class="shrink-0" /> {s.scanError}
       </div>
     {/if}
     {#if duplicateNames.size > 0}
-      <div class="flex items-center gap-2 rounded-lg border border-[#ffb800]/30 bg-[#ffb800]/10 px-3 py-2 text-xs text-[#ffb800]">
+      <div class="flex items-center gap-2 rounded-lg border border-yellow/30 bg-yellow/10 px-3 py-2 text-xs text-yellow">
         <AlertTriangle size={13} class="shrink-0" />
         {duplicateNames.size} duplicate name{duplicateNames.size > 1 ? "s" : ""} —
         <span class="font-mono">{[...duplicateNames].join(", ")}</span>. Edit files to fix.
@@ -383,7 +383,7 @@
                 <span class="shrink-0 text-[10px] text-text-dimmer">{file.contracts.length}</span>
                 <button
                   onclick={() => openEditor(file)}
-                  class="shrink-0 rounded p-1 text-text-dimmer transition-colors hover:bg-surface-3 hover:text-[#00f0ff]"
+                  class="shrink-0 rounded p-1 text-text-dimmer transition-colors hover:bg-surface-3 hover:text-accent"
                   title="Edit file"
                 >
                   <Pencil size={11} />
@@ -400,7 +400,7 @@
                       {order
                         ? 'border-accent/30 bg-accent/15'
                         : isDupe
-                          ? 'border-[#ffb800]/25 bg-[#ffb800]/5 hover:border-[#ffb800]/50'
+                          ? 'border-yellow/25 bg-yellow/5 hover:border-yellow/50'
                           : 'border-transparent bg-surface-2/50 hover:border-border hover:bg-surface-3'}"
                     onclick={() => toggleSelect(file, contract)}
                   >
@@ -414,16 +414,16 @@
                       </div>
                     {/if}
                     {#if isDupe}
-                      <AlertTriangle size={11} class="shrink-0 text-[#ffb800]" />
+                      <AlertTriangle size={11} class="shrink-0 text-yellow" />
                     {/if}
-                    <span class="flex-1 truncate text-sm {order ? 'font-medium text-accent-hover' : isDupe ? 'text-[#ffb800]' : 'text-text'}">
+                    <span class="flex-1 truncate text-sm {order ? 'font-medium text-accent-hover' : isDupe ? 'text-yellow' : 'text-text'}">
                       {contract.name}
                     </span>
                     <span class="shrink-0 rounded-full px-1.5 py-px text-[9px] font-medium {kindStyle[contract.kind] ?? 'bg-surface-3 text-text-dimmer'}">
                       {contract.kind}
                     </span>
                     {#if hasConstructor}
-                      <span class="shrink-0 rounded-full bg-[#8a2be2]/15 px-1.5 py-px text-[9px] font-medium text-[#8a2be2]">
+                      <span class="shrink-0 rounded-full bg-primary/15 px-1.5 py-px text-[9px] font-medium text-primary">
                         ctor({(contract.constructor_args ?? []).length})
                       </span>
                     {/if}
@@ -485,7 +485,7 @@
                           <Rocket size={12} /> Deploy
                         </button>
                       {:else if sc.deployState === "compiling"}
-                        <div class="flex items-center gap-1.5 rounded-lg bg-[#ffb800]/10 px-3 py-1.5 text-xs font-medium text-[#ffb800]">
+                        <div class="flex items-center gap-1.5 rounded-lg bg-yellow/10 px-3 py-1.5 text-xs font-medium text-yellow">
                           <Loader size={12} class="animate-spin" /> Compiling…
                         </div>
                       {:else if sc.deployState === "deploying"}
@@ -494,7 +494,7 @@
                         </div>
                       {:else if sc.deployState === "error"}
                         <button
-                          class="flex items-center gap-1.5 rounded-lg bg-[#ff0055]/10 px-3 py-1.5 text-xs font-medium text-[#ff0055] transition-colors hover:bg-[#ff0055]/20"
+                          class="flex items-center gap-1.5 rounded-lg bg-red/10 px-3 py-1.5 text-xs font-medium text-red transition-colors hover:bg-red/20"
                           onclick={() => deployContract(i)}
                           title={sc.deployError}
                         >
@@ -526,7 +526,7 @@
                   </div>
 
                   {#if sc.deployState === "error" && sc.deployError}
-                    <div class="flex items-start gap-2 border-t border-[#ff0055]/20 bg-[#ff0055]/5 px-4 py-2.5 text-xs text-[#ff0055]">
+                    <div class="flex items-start gap-2 border-t border-red/20 bg-red/5 px-4 py-2.5 text-xs text-red">
                       <AlertTriangle size={12} class="mt-0.5 shrink-0" />
                       <span class="font-mono break-all">{sc.deployError}</span>
                     </div>
@@ -541,7 +541,7 @@
                         {#each sc.constructorArgs as arg, ai}
                           <div class="flex items-center gap-3">
                             <div class="w-32 shrink-0">
-                              <div class="truncate font-mono text-[10px] text-[#00f0ff]">{arg.arg_type}</div>
+                              <div class="truncate font-mono text-[10px] text-accent">{arg.arg_type}</div>
                               <div class="truncate text-xs text-text-dim">{arg.name || `arg${ai}`}</div>
                             </div>
                             <input

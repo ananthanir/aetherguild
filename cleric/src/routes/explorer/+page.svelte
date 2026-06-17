@@ -91,7 +91,7 @@
       </div>
       {#if latestBlock >= 0}
         <div class="font-mono text-xs text-text-dimmer">
-          Latest block: <span class="text-[#00f0ff]">#{latestBlock}</span>
+          Latest block: <span class="text-accent">#{latestBlock}</span>
         </div>
       {/if}
     </div>
@@ -116,7 +116,7 @@
       </div>
     {:else if error}
       <div class="flex flex-col items-center justify-center py-20 text-center">
-        <p class="text-sm text-[#ff0055]">{error}</p>
+        <p class="text-sm text-red">{error}</p>
         <p class="mt-1 text-xs text-text-dimmer">Make sure Druid is running.</p>
         <button
           class="mt-4 rounded-lg bg-surface-2 px-4 py-2 text-sm text-text-dim hover:bg-surface-3"

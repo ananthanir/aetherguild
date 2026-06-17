@@ -72,7 +72,7 @@
       </div>
     {:else if error}
       <div class="flex flex-col items-center justify-center py-20 text-center">
-        <p class="text-sm text-[#ff0055]">{error}</p>
+        <p class="text-sm text-red">{error}</p>
         <p class="mt-1 text-xs text-text-dimmer">Make sure Druid is running.</p>
       </div>
     {:else if block}
@@ -101,7 +101,7 @@
                   onclick={() => copyToClipboard(field.value, field.key)}
                 >
                   {#if copied === field.key}
-                    <Check size={12} class="text-[#00ff66]" />
+                    <Check size={12} class="text-green" />
                   {:else}
                     <Copy size={12} />
                   {/if}
@@ -136,7 +136,7 @@
                 </div>
                 <div class="ml-4 shrink-0 text-right">
                   <div class="text-sm font-medium text-text">{formatEth(t.value)}</div>
-                  <div class="text-xs text-[#00ff66]">Success</div>
+                  <div class="text-xs text-green">Success</div>
                 </div>
               </a>
             {/each}

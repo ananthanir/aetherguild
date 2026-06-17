@@ -13,9 +13,9 @@
   const LEVELS: Level[] = ["INFO", "WARN", "ERROR", "DEBUG"];
 
   const levelStyle: Record<Level, { badge: string; row: string; text: string }> = {
-    INFO:  { badge: "bg-[#00f0ff]/15 text-[#00f0ff]",   row: "",                              text: "text-text" },
-    WARN:  { badge: "bg-[#ffb800]/15 text-[#ffb800]",   row: "bg-[#ffb800]/5 border-l-2 border-[#ffb800]/40", text: "text-[#ffb800]" },
-    ERROR: { badge: "bg-[#ff0055]/15 text-[#ff0055]",   row: "bg-[#ff0055]/5 border-l-2 border-[#ff0055]/40", text: "text-[#ff0055]" },
+    INFO:  { badge: "bg-accent/15 text-accent",   row: "",                              text: "text-text" },
+    WARN:  { badge: "bg-yellow/15 text-yellow",   row: "bg-yellow/5 border-l-2 border-yellow/40", text: "text-yellow" },
+    ERROR: { badge: "bg-red/15 text-red",   row: "bg-red/5 border-l-2 border-red/40", text: "text-red" },
     DEBUG: { badge: "bg-surface-3 text-text-dimmer",     row: "",                              text: "text-text-dimmer" },
   };
 
@@ -63,7 +63,7 @@
       <p class="text-sm text-text-dim">Real-time output from the Druid process</p>
     </div>
     <button
-      class="flex items-center gap-2 rounded-lg bg-surface-2 px-3 py-2 text-sm text-text-dim border border-border transition-colors hover:bg-[#ff0055]/10 hover:text-[#ff0055] hover:border-[#ff0055]/30"
+      class="flex items-center gap-2 rounded-lg bg-surface-2 px-3 py-2 text-sm text-text-dim border border-border transition-colors hover:bg-red/10 hover:text-red hover:border-red/30"
       onclick={clearLogs}
     >
       <Trash2 size={14} /> Clear
@@ -103,7 +103,7 @@
   <div
     bind:this={logEl}
     onscroll={handleScroll}
-    class="flex-1 overflow-y-auto rounded-xl border border-border bg-[#03040b] font-mono text-xs"
+    class="flex-1 overflow-y-auto rounded-xl border border-border bg-background font-mono text-xs"
   >
     {#if filtered.length === 0}
       <div class="flex h-full flex-col items-center justify-center text-text-dimmer">
@@ -111,7 +111,7 @@
       </div>
     {:else}
       {#each filtered as entry (entry.id)}
-        <div class="flex items-start gap-3 px-4 py-[3px] {levelStyle[entry.level].row} hover:bg-white/[0.02]">
+        <div class="flex items-start gap-3 px-4 py-[3px] {levelStyle[entry.level].row} hover:bg-text/[0.04]">
           <span class="mt-[1px] shrink-0 text-text-dimmer">{entry.time}</span>
           <span class="mt-[1px] shrink-0 rounded px-1.5 py-px text-[10px] font-bold {levelStyle[entry.level].badge}">{entry.level}</span>
           <span class="min-w-0 break-all {levelStyle[entry.level].text}">{entry.raw}</span>

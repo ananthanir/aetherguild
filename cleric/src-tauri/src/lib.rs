@@ -39,10 +39,12 @@ struct StatusPayload { status: String }
 
 // ── Binary extraction ─────────────────────────────────────────────────────
 /// Write `bytes` to `path` only when the file is absent or a different size.
-fn extract_binary(path: &PathBuf, bytes: &[u8]) -> Result<(), String> {
+/// Returns `true` when the file was (re)written, so callers can react to a new
+/// or upgraded binary (e.g. re-run the one-time druid authorization).
+fn extract_binary(path: &PathBuf, bytes: &[u8]) -> Result<bool, String> {
     if path.exists() {
         if let Ok(m) = fs::metadata(path) {
-            if m.len() == bytes.len() as u64 { return Ok(()); }
+            if m.len() == bytes.len() as u64 { return Ok(false); }
         }
     }
     fs::write(path, bytes).map_err(|e| format!("Cannot write {}: {e}", path.display()))?;
@@ -51,7 +53,60 @@ fn extract_binary(path: &PathBuf, bytes: &[u8]) -> Result<(), String> {
         use std::os::unix::fs::PermissionsExt;
         fs::set_permissions(path, fs::Permissions::from_mode(0o755)).ok();
     }
-    Ok(())
+    Ok(true)
+}
+
+// ── Windows: one-time druid authorization ─────────────────────────────────
+// druid is an unsigned, low-reputation binary, so Smart App Control / SmartScreen
+// may refuse to run it. Cleric normally spawns it with CreateProcess, which never
+// shows the interactive "allow" dialog — so the user would otherwise have to find
+// and run druid.exe by hand to authorize it. Instead, the first time a new druid
+// build is extracted we tag it with a Mark-of-the-Web and launch it once via
+// ShellExecuteEx. That surfaces the OS allow prompt; once the user allows it, the
+// decision is cached against the file hash and every later CreateProcess spawn
+// (with full log streaming) runs without prompting. We immediately terminate this
+// priming instance — we only wanted the authorization, not a running node.
+///
+/// Returns `true` if druid actually started — meaning the user allowed it (or it
+/// was already trusted). Returns `false` if they clicked "Don't run" / it was
+/// blocked, so the caller knows to try again on the next launch.
+#[cfg(windows)]
+fn authorize_druid(path: &PathBuf) -> bool {
+    // Attach a Mark-of-the-Web (Zone.Identifier ADS) so the shell shows the
+    // SmartScreen/SAC dialog instead of silently allowing or blocking.
+    let ads = format!("{}:Zone.Identifier", path.display());
+    let _ = fs::write(&ads, b"[ZoneTransfer]\r\nZoneId=3\r\n");
+
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::Foundation::CloseHandle;
+    use windows_sys::Win32::System::Threading::TerminateProcess;
+    use windows_sys::Win32::UI::Shell::{
+        ShellExecuteExW, SEE_MASK_NOCLOSEPROCESS, SHELLEXECUTEINFOW,
+    };
+    use windows_sys::Win32::UI::WindowsAndMessaging::SW_HIDE;
+
+    let file: Vec<u16> = path.as_os_str().encode_wide().chain(std::iter::once(0)).collect();
+    let verb: Vec<u16> = "open".encode_utf16().chain(std::iter::once(0)).collect();
+
+    let mut info: SHELLEXECUTEINFOW = unsafe { std::mem::zeroed() };
+    info.cbSize = std::mem::size_of::<SHELLEXECUTEINFOW>() as u32;
+    info.fMask = SEE_MASK_NOCLOSEPROCESS;
+    info.lpVerb = verb.as_ptr();
+    info.lpFile = file.as_ptr();
+    info.nShow = SW_HIDE;
+
+    unsafe {
+        // ShellExecuteExW blocks on the SmartScreen/SAC dialog. If the user allows
+        // it, the node starts and we get a handle back; kill it right away. A null
+        // handle means "Don't run" / blocked — report that so we retry next launch.
+        if ShellExecuteExW(&mut info) != 0 && !info.hProcess.is_null() {
+            TerminateProcess(info.hProcess, 0);
+            CloseHandle(info.hProcess);
+            true
+        } else {
+            false
+        }
+    }
 }
 
 // ── Druid management ──────────────────────────────────────────────────────
@@ -373,10 +428,31 @@ pub fn run() {
             let druid_path = bin_dir.join(DRUID_EXE);
             let solc_path  = bin_dir.join(SOLC_EXE);
 
-            extract_binary(&druid_path, DRUID_BIN)
+            let druid_written = extract_binary(&druid_path, DRUID_BIN)
                 .map_err(|e| Box::new(std::io::Error::new(std::io::ErrorKind::Other, e)))?;
             extract_binary(&solc_path, SOLC_BIN)
                 .map_err(|e| Box::new(std::io::Error::new(std::io::ErrorKind::Other, e)))?;
+
+            // Surface the OS allow prompt for druid until the user accepts it once,
+            // so later CreateProcess spawns run unprompted. We keep retrying across
+            // launches (not just on first extract) because a "Don't run" leaves the
+            // binary unauthorized — gating only on a fresh write would strand the
+            // user with no way to get the dialog back. A marker records success,
+            // keyed to the binary's size so a new druid build re-triggers it.
+            // (solc is widely trusted by reputation and needs no such step.)
+            #[cfg(windows)]
+            {
+                let marker = bin_dir.join(".druid-authorized");
+                let expected = DRUID_BIN.len().to_string();
+                let authorized = fs::read_to_string(&marker)
+                    .map(|s| s.trim() == expected)
+                    .unwrap_or(false);
+                if (druid_written || !authorized) && authorize_druid(&druid_path) {
+                    let _ = fs::write(&marker, &expected);
+                }
+            }
+            #[cfg(not(windows))]
+            let _ = druid_written;
 
             app.manage(AppState {
                 child: Arc::new(Mutex::new(None)),
