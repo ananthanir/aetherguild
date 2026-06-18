@@ -3,7 +3,7 @@
   import { open } from "@tauri-apps/plugin-dialog";
   import {
     FolderOpen, X, Rocket, ChevronDown, ChevronRight,
-    Copy, Check, FileCode, ArrowRight, AlertTriangle, Pencil, Save, Loader,
+    Copy, Check, FileCode, ArrowRight, AlertTriangle, Pencil, Save, Loader, RotateCcw,
   } from "lucide-svelte";
   import {
     createPublicClient,
@@ -108,6 +108,12 @@
       await invoke("write_file", { path: editorFile.path, content: editorContent });
       editorOriginal = editorContent;
       editorSaved = true;
+      // Any already-deployed contract from this file is now out of date — flag it
+      // so the queue offers a redeploy.
+      const savedPath = editorFile.path;
+      s.selected = s.selected.map((sc) =>
+        sc.deployed && sc.filePath === savedPath ? { ...sc, stale: true } : sc
+      );
       s.solFiles = await invoke<SolFile[]>("scan_contracts", { folder: s.folderPath });
       setTimeout(() => (editorSaved = false), 2000);
     } catch (e: any) {
@@ -153,6 +159,7 @@
           argValues: {},
           deployState: "idle",
           deployed: false,
+          stale: false,
         },
       ];
     }
@@ -233,12 +240,41 @@
         ...s.selected[index],
         deployState: "deployed",
         deployed: true,
+        stale: false,
         address: receipt.contractAddress ?? undefined,
         txHash: hash,
         blockNumber: Number(receipt.blockNumber),
       };
     } catch (e: any) {
       s.selected[index] = { ...s.selected[index], deployState: "error", deployError: String(e) };
+    }
+  }
+
+  // ── Deploy-all gating ─────────────────────────────────────────────────────
+  /** True when every constructor argument for `sc` has a non-empty value. */
+  function argsFilled(sc: SelectedContract): boolean {
+    return sc.constructorArgs.every((arg, ai) => {
+      const key = arg.name || `arg${ai}`;
+      return (sc.argValues[key] ?? "").trim() !== "";
+    });
+  }
+
+  // Contracts that still need deploying: never deployed, or deployed but their
+  // source changed since (stale). Failed ones also count as pending.
+  let pending = $derived(s.selected.filter((sc) => !sc.deployed || sc.stale));
+  // Deploy All is allowed only when there's something to do and every pending
+  // contract has all of its constructor values filled in.
+  let canDeployAll = $derived(pending.length > 0 && pending.every(argsFilled));
+
+  async function deployAll() {
+    if (!canDeployAll) return;
+    for (let i = 0; i < s.selected.length; i++) {
+      const sc = s.selected[i];
+      if (sc.deployed && !sc.stale) continue; // already up to date
+      await deployContract(i);
+      // Stop the batch if a deploy fails, so dependents don't deploy against a
+      // missing prerequisite.
+      if (s.selected[i].deployState === "error") break;
     }
   }
 
@@ -442,8 +478,13 @@
           <h2 class="text-xs font-medium uppercase tracking-wider text-text-dimmer">
             Deploy Queue ({s.selected.length})
           </h2>
-          {#if s.selected.length > 0 && !s.selected.every((sc) => sc.deployed)}
-            <button class="flex items-center gap-2 rounded-lg bg-green px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90">
+          {#if pending.length > 0}
+            <button
+              class="flex items-center gap-2 rounded-lg bg-green px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+              onclick={deployAll}
+              disabled={!canDeployAll}
+              title={canDeployAll ? "Deploy all pending contracts" : "Fill in every constructor value to enable Deploy All"}
+            >
               <Rocket size={14} /> Deploy All
             </button>
           {/if}
@@ -471,16 +512,21 @@
                         <span class="rounded-full px-1.5 py-px text-[9px] font-medium {kindStyle[sc.kind] ?? ''}">
                           {sc.kind}
                         </span>
-                        {#if sc.deployed}
+                        {#if sc.deployed && !sc.stale}
                           <span class="rounded-full bg-green/15 px-2 py-0.5 text-xs font-medium text-green">Deployed</span>
+                        {/if}
+                        {#if sc.deployed && sc.stale}
+                          <span class="rounded-full bg-yellow/15 px-2 py-0.5 text-xs font-medium text-yellow">Source changed</span>
                         {/if}
                       </div>
                     </div>
                     <div class="flex items-center gap-1">
                       {#if sc.deployState === "idle"}
                         <button
-                          class="flex items-center gap-1.5 rounded-lg bg-green/15 px-3 py-1.5 text-xs font-medium text-green transition-colors hover:bg-green/25"
+                          class="flex items-center gap-1.5 rounded-lg bg-green/15 px-3 py-1.5 text-xs font-medium text-green transition-colors hover:bg-green/25 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-green/15"
                           onclick={() => deployContract(i)}
+                          disabled={!argsFilled(sc)}
+                          title={argsFilled(sc) ? "" : "Fill in all constructor values first"}
                         >
                           <Rocket size={12} /> Deploy
                         </button>
@@ -501,9 +547,20 @@
                           <AlertTriangle size={12} /> Retry
                         </button>
                       {:else if sc.deployState === "deployed"}
-                        <div class="flex items-center gap-1.5 rounded-lg bg-green/10 px-3 py-1.5 text-xs font-medium text-green">
-                          <Check size={12} /> Done
-                        </div>
+                        {#if sc.stale}
+                          <button
+                            class="flex items-center gap-1.5 rounded-lg bg-yellow/15 px-3 py-1.5 text-xs font-medium text-yellow transition-colors hover:bg-yellow/25 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-yellow/15"
+                            onclick={() => deployContract(i)}
+                            disabled={!argsFilled(sc)}
+                            title={argsFilled(sc) ? "Redeploy with the updated source" : "Fill in all constructor values first"}
+                          >
+                            <RotateCcw size={12} /> Redeploy
+                          </button>
+                        {:else}
+                          <div class="flex items-center gap-1.5 rounded-lg bg-green/10 px-3 py-1.5 text-xs font-medium text-green">
+                            <Check size={12} /> Done
+                          </div>
+                        {/if}
                       {/if}
                       <button
                         class="rounded-md p-1.5 text-text-dim transition-colors hover:bg-surface-2 hover:text-text"
@@ -532,7 +589,7 @@
                     </div>
                   {/if}
 
-                  {#if sc.constructorArgs.length > 0 && !sc.deployed}
+                  {#if sc.constructorArgs.length > 0 && (!sc.deployed || sc.stale)}
                     <div class="border-t border-border px-4 py-3">
                       <div class="mb-2 text-[10px] font-medium uppercase tracking-wider text-text-dimmer">
                         Constructor Arguments

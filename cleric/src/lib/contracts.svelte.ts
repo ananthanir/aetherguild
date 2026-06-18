@@ -31,6 +31,9 @@ export interface SelectedContract {
   deployState: DeployState;
   deployError?: string;
   deployed: boolean;
+  // Set when the contract's source file is edited after a successful deploy,
+  // so the UI can offer a redeploy.
+  stale?: boolean;
   address?: string;
   txHash?: string;
   blockNumber?: number;
