@@ -244,6 +244,7 @@
         address: receipt.contractAddress ?? undefined,
         txHash: hash,
         blockNumber: Number(receipt.blockNumber),
+        abi,
       };
     } catch (e: any) {
       s.selected[index] = { ...s.selected[index], deployState: "error", deployError: String(e) };

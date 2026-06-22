@@ -15,7 +15,8 @@
         "title": "Cleric",
         "width": 1100,
         "height": 750,
-        "additionalBrowserArgs": "--enable-features=WebAssemblyUnlimitedSyncCompilation"
+        "additionalBrowserArgs": "--enable-features=WebAssemblyUnlimitedSyncCompilation",
+        "dragDropEnabled": false
       }
     ],
     "security": {

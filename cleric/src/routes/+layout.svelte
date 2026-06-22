@@ -15,6 +15,7 @@
     FileCode2,
     ScrollText,
     Settings,
+    FlaskConical,
     Sun,
     Moon,
   } from "lucide-svelte";
@@ -25,6 +26,7 @@
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
     { href: "/explorer", label: "Explorer", icon: Search },
     { href: "/contracts", label: "Contracts", icon: FileCode2 },
+    { href: "/tests", label: "Tests", icon: FlaskConical },
     { href: "/logs", label: "Logs", icon: ScrollText },
     { href: "/settings", label: "Settings", icon: Settings },
   ];

@@ -66,13 +66,13 @@ exact rest of the name doesn't matter, so any of these are accepted:
 pnpm install
 
 # Dev (hot reload):
-pnpm tauri dev
+cargo tauri dev
 
 # Production build (installer in src-tauri/target/release/bundle/):
-pnpm tauri build
+cargo tauri build
 ```
 
-The first `pnpm tauri dev/build` after swapping a binary recompiles the Rust shell
+The first `cargo tauri dev/build` after swapping a binary recompiles the Rust shell
 (the new bytes get baked in via `include_bytes!`). On launch the app extracts the
 binaries to your per‑user app‑data dir (`%LOCALAPPDATA%\com.anant.cleric\bin\` on
 Windows) and only rewrites them when the size changes.

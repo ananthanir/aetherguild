@@ -17,6 +17,7 @@
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-dialog": "^2.7.1",
     "@tauri-apps/plugin-opener": "^2",
+    "@xyflow/svelte": "^1.6.0",
     "lucide-svelte": "^1.0.1",
     "solc": "^0.8.35",
     "svelte-dnd-action": "^0.9.69",

@@ -37,6 +37,8 @@ export interface SelectedContract {
   address?: string;
   txHash?: string;
   blockNumber?: number;
+  // Compiled ABI, kept after deploy so the Tests tab can list callable functions.
+  abi?: any[];
 }
 
 class ContractsStore {
